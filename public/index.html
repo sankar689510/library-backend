@@ -24,16 +24,58 @@
             color: var(--text);
         }
 
+        /* LOGIN */
+        #loginPage {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .loginBox {
+            background: var(--panel);
+            padding: 40px;
+            border-radius: 12px;
+            width: 300px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: var(--card);
+            border: 1px solid #1f2937;
+            color: white;
+            border-radius: 6px;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        button.primary {
+            background: var(--accent);
+            color: white;
+            padding: 8px 14px;
+            border: none;
+            border-radius: 6px;
+        }
+
+        button.danger {
+            background: var(--danger);
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 5px;
+        }
+
         .sidebar {
             width: 230px;
             height: 100vh;
             position: fixed;
             background: var(--panel);
             padding: 25px;
-        }
-
-        .sidebar h2 {
-            margin-bottom: 25px;
+            display: none;
         }
 
         .sidebar button {
@@ -45,7 +87,6 @@
             border: none;
             color: var(--muted);
             text-align: left;
-            cursor: pointer;
             border-radius: 6px;
         }
 
@@ -57,6 +98,7 @@
         .main {
             margin-left: 230px;
             padding: 40px;
+            display: none;
         }
 
         .card {
@@ -80,44 +122,6 @@
             text-align: center;
         }
 
-        .statBox h1 {
-            margin: 0;
-            font-size: 28px;
-        }
-
-        .statBox p {
-            margin: 5px 0 0 0;
-            color: var(--muted);
-        }
-
-        input {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            background: var(--card);
-            border: 1px solid #1f2937;
-            color: white;
-            border-radius: 6px;
-        }
-
-        button.primary {
-            background: var(--accent);
-            color: white;
-            padding: 8px 14px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-
-        button.danger {
-            background: var(--danger);
-            color: white;
-            border: none;
-            padding: 6px 10px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
         table {
             width: 100%;
             border-collapse: collapse;
@@ -139,6 +143,17 @@
 
 <body>
 
+    <!-- LOGIN -->
+    <div id="loginPage">
+        <div class="loginBox">
+            <h2>Admin Login</h2>
+            <input id="username" placeholder="Username">
+            <input id="password" type="password" placeholder="Password">
+            <button class="primary" onclick="adminLogin()">Login</button>
+        </div>
+    </div>
+
+    <!-- ADMIN -->
     <div class="sidebar">
         <h2>📚 Smart Admin</h2>
         <button onclick="show('dashboard')">Dashboard</button>
@@ -148,6 +163,7 @@
         <button onclick="show('members')">Members</button>
         <button onclick="show('books')">Books</button>
         <button onclick="show('transactions')">Transactions</button>
+        <button class="danger" onclick="logout()">Logout</button>
     </div>
 
     <div class="main">
@@ -227,6 +243,52 @@
 
     <script>
         const API = "https://library-backend-dm8n.onrender.com";
+        let token = localStorage.getItem("adminToken");
+
+        function showAdmin() {
+            document.getElementById("loginPage").style.display = "none";
+            document.querySelector(".sidebar").style.display = "block";
+            document.querySelector(".main").style.display = "block";
+            loadDashboard();
+        }
+
+        function logout() {
+            localStorage.removeItem("adminToken");
+            location.reload();
+        }
+
+        async function adminLogin() {
+            const res = await fetch(API + "/admin/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    username: username.value,
+                    password: password.value
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok) { alert(data.error); return; }
+
+            localStorage.setItem("adminToken", data.token);
+            token = data.token;
+            showAdmin();
+        }
+
+        async function secureFetch(url, options = {}) {
+            options.headers = options.headers || {};
+            options.headers["Authorization"] = "Bearer " + token;
+
+            const res = await fetch(url, options);
+
+            if (res.status === 403) {
+                alert("Session expired. Login again.");
+                logout();
+                return;
+            }
+
+            return res;
+        }
 
         function show(id) {
             document.querySelectorAll(".section").forEach(s => s.style.display = "none");
@@ -239,17 +301,16 @@
         }
 
         async function loadDashboard() {
-            const members = await fetch(API + "/admin/members").then(r => r.json());
-            const books = await fetch(API + "/admin/books").then(r => r.json());
+            const members = await secureFetch(API + "/admin/members").then(r => r.json());
+            const books = await secureFetch(API + "/admin/books").then(r => r.json());
 
-            document.getElementById("totalMembers").innerText = members.length;
-            document.getElementById("totalBooks").innerText = books.length;
-            document.getElementById("issuedBooks").innerText =
-                books.filter(b => b.status === "issued").length;
+            totalMembers.innerText = members.length;
+            totalBooks.innerText = books.length;
+            issuedBooks.innerText = books.filter(b => b.status === "issued").length;
         }
 
         async function addMember() {
-            const res = await fetch(API + "/admin/add-member", {
+            const res = await secureFetch(API + "/admin/add-member", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -264,7 +325,7 @@
         }
 
         async function addBook() {
-            const res = await fetch(API + "/admin/add-book", {
+            const res = await secureFetch(API + "/admin/add-book", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -278,7 +339,7 @@
         }
 
         async function manualIssue() {
-            const res = await fetch(API + "/admin/issue", {
+            const res = await secureFetch(API + "/admin/issue", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -292,18 +353,18 @@
 
         async function deleteMember(id) {
             if (!confirm("Remove member?")) return;
-            await fetch(API + "/admin/delete-member/" + id, { method: "DELETE" });
+            await secureFetch(API + "/admin/delete-member/" + id, { method: "DELETE" });
             loadMembers();
         }
 
         async function deleteBook(id) {
             if (!confirm("Delete book?")) return;
-            await fetch(API + "/admin/delete-book/" + id, { method: "DELETE" });
+            await secureFetch(API + "/admin/delete-book/" + id, { method: "DELETE" });
             loadBooks();
         }
 
         async function loadMembers() {
-            const data = await fetch(API + "/admin/members").then(r => r.json());
+            const data = await secureFetch(API + "/admin/members").then(r => r.json());
             membersTable.innerHTML =
                 "<tr><th>Name</th><th>Phone</th><th>Expiry</th><th></th></tr>" +
                 data.map(m => `
@@ -316,7 +377,7 @@
         }
 
         async function loadBooks() {
-            const data = await fetch(API + "/admin/books").then(r => r.json());
+            const data = await secureFetch(API + "/admin/books").then(r => r.json());
             booksTable.innerHTML =
                 "<tr><th>Title</th><th>Author</th><th>Status</th><th></th></tr>" +
                 data.map(b => `
@@ -329,7 +390,7 @@
         }
 
         async function loadTransactions() {
-            const data = await fetch(API + "/admin/transactions").then(r => r.json());
+            const data = await secureFetch(API + "/admin/transactions").then(r => r.json());
             transactionsTable.innerHTML =
                 "<tr><th>Member</th><th>Book</th><th>Status</th><th>Fine</th></tr>" +
                 data.map(t => `
@@ -341,7 +402,7 @@
 </tr>`).join("");
         }
 
-        loadDashboard();
+        if (token) { showAdmin(); }
     </script>
 
 </body>

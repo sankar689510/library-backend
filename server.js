@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
+const jwt = require("jsonwebtoken");
 
 const app = express();
 app.use(cors());
@@ -21,6 +22,45 @@ const pool = new Pool({
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT,
 });
+
+/* ================= ADMIN LOGIN ================= */
+
+app.post("/admin/login", (req, res) => {
+    const { username, password } = req.body;
+
+    if (
+        username !== process.env.ADMIN_USER ||
+        password !== process.env.ADMIN_PASS
+    ) {
+        return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+        { role: "admin" },
+        process.env.JWT_SECRET,
+        { expiresIn: "8h" }
+    );
+
+    res.json({ token });
+});
+
+/* ================= ADMIN AUTH MIDDLEWARE ================= */
+
+function verifyAdmin(req, res, next) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader)
+        return res.status(403).json({ error: "No token provided" });
+
+    const token = authHeader.split(" ")[1];
+
+    try {
+        jwt.verify(token, process.env.JWT_SECRET);
+        next();
+    } catch {
+        return res.status(403).json({ error: "Invalid or expired token" });
+    }
+}
 
 /* ================= MEMBER LOGIN ================= */
 
@@ -44,7 +84,7 @@ app.post("/member-login", async (req, res) => {
 
 /* ================= ADD MEMBER ================= */
 
-app.post("/admin/add-member", async (req, res) => {
+app.post("/admin/add-member", verifyAdmin, async (req, res) => {
     const { name, phone, membership_start, membership_expiry } = req.body;
 
     try {
@@ -64,7 +104,7 @@ app.post("/admin/add-member", async (req, res) => {
 
 /* ================= ADD BOOK ================= */
 
-app.post("/admin/add-book", async (req, res) => {
+app.post("/admin/add-book", verifyAdmin, async (req, res) => {
     const { title, author, barcode } = req.body;
 
     try {
@@ -82,7 +122,7 @@ app.post("/admin/add-book", async (req, res) => {
     }
 });
 
-/* ================= SCAN BOOK (ISSUE OR RETURN) ================= */
+/* ================= SCAN BOOK ================= */
 
 app.post("/scan", async (req, res) => {
     const { member_id, barcode } = req.body;
@@ -90,7 +130,6 @@ app.post("/scan", async (req, res) => {
     try {
         const today = new Date();
 
-        // Check member
         const memberRes = await pool.query(
             "SELECT * FROM members WHERE id=$1",
             [member_id]
@@ -104,7 +143,6 @@ app.post("/scan", async (req, res) => {
         if (new Date(member.membership_expiry) < today)
             return res.status(400).json({ error: "Membership expired" });
 
-        // Find book
         const bookRes = await pool.query(
             "SELECT * FROM books WHERE barcode=$1",
             [barcode]
@@ -115,7 +153,6 @@ app.post("/scan", async (req, res) => {
 
         const book = bookRes.rows[0];
 
-        // ISSUE BOOK
         if (book.status === "available") {
             const dueDate = new Date();
             dueDate.setDate(today.getDate() + 14);
@@ -135,7 +172,6 @@ app.post("/scan", async (req, res) => {
             return res.json({ message: "Book issued successfully" });
         }
 
-        // RETURN BOOK
         if (book.status === "issued") {
             const transRes = await pool.query(
                 `SELECT * FROM transactions
@@ -187,21 +223,21 @@ app.post("/scan", async (req, res) => {
 
 /* ================= ADMIN VIEW ================= */
 
-app.get("/admin/members", async (req, res) => {
+app.get("/admin/members", verifyAdmin, async (req, res) => {
     const result = await pool.query(
         "SELECT * FROM members ORDER BY id DESC"
     );
     res.json(result.rows);
 });
 
-app.get("/admin/books", async (req, res) => {
+app.get("/admin/books", verifyAdmin, async (req, res) => {
     const result = await pool.query(
         "SELECT * FROM books ORDER BY id DESC"
     );
     res.json(result.rows);
 });
 
-app.get("/admin/transactions", async (req, res) => {
+app.get("/admin/transactions", verifyAdmin, async (req, res) => {
     const result = await pool.query(`
     SELECT t.*, 
            m.name AS member_name, 
@@ -214,8 +250,8 @@ app.get("/admin/transactions", async (req, res) => {
 
     res.json(result.rows);
 });
-/* ================= DELETE BOOK ================= */
-app.delete("/admin/delete-book/:id", async (req, res) => {
+
+app.delete("/admin/delete-book/:id", verifyAdmin, async (req, res) => {
     try {
         await pool.query("DELETE FROM books WHERE id=$1", [req.params.id]);
         res.json({ message: "Book deleted" });
@@ -223,8 +259,8 @@ app.delete("/admin/delete-book/:id", async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-/* ================= DELETE MEMBER ================= */
-app.delete("/admin/delete-member/:id", async (req, res) => {
+
+app.delete("/admin/delete-member/:id", verifyAdmin, async (req, res) => {
     try {
         await pool.query("DELETE FROM members WHERE id=$1", [req.params.id]);
         res.json({ message: "Member removed" });
@@ -232,8 +268,8 @@ app.delete("/admin/delete-member/:id", async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-/* ================= ADMIN ISSUE ================= */
-app.post("/admin/issue", async (req, res) => {
+
+app.post("/admin/issue", verifyAdmin, async (req, res) => {
     const { member_id, book_id } = req.body;
     const today = new Date();
     const dueDate = new Date();
@@ -257,7 +293,9 @@ app.post("/admin/issue", async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-/* ================= MEMBER CURRENT BOOKS ================= */
+
+/* ================= PUBLIC ROUTES ================= */
+
 app.get("/member/:id/books", async (req, res) => {
     try {
         const result = await pool.query(
@@ -279,7 +317,7 @@ app.get("/member/:id/books", async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-/* ================= REQUEST RENEWAL ================= */
+
 app.post("/member/request-renewal", async (req, res) => {
     const { member_id } = req.body;
 
@@ -294,7 +332,7 @@ app.post("/member/request-renewal", async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-/* ================= PUBLIC BOOKS LIST ================= */
+
 app.get("/books", async (req, res) => {
     try {
         const result = await pool.query(
@@ -308,7 +346,7 @@ app.get("/books", async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-/* ================= SAVE PUSH TOKEN ================= */
+
 app.post("/member/save-push-token", async (req, res) => {
     const { member_id, push_token } = req.body;
 
@@ -323,6 +361,7 @@ app.post("/member/save-push-token", async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
 /* ================= START SERVER ================= */
 
 const PORT = process.env.PORT || 5000;
