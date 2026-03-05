@@ -386,14 +386,15 @@ app.get("/admin/renew-requests", async (req, res) => {
 
         const result = await pool.query(`
       SELECT 
-        renew_requests.id,
-        renew_requests.transaction_id,
-        renew_requests.status,
-        members.name,
-        members.id as member_id
-      FROM renew_requests
-      JOIN members ON members.id = renew_requests.member_id
-      ORDER BY renew_requests.created_at DESC
+        r.id,
+        r.transaction_id,
+        r.status,
+        r.member_id,
+        m.name
+      FROM renew_requests r
+      LEFT JOIN members m 
+      ON m.id = r.member_id
+      ORDER BY r.created_at DESC
     `);
 
         res.json(result.rows);
