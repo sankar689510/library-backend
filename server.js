@@ -407,6 +407,37 @@ app.get("/books", async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+/* ================= MEMBER BORROWED BOOKS ================= */
+
+app.get("/member/:id/books", async (req, res) => {
+
+    try {
+
+        const result = await pool.query(
+            `SELECT 
+                t.id,
+                b.title,
+                b.author,
+                t.issue_date,
+                t.due_date
+            FROM transactions t
+            JOIN books b ON t.book_id = b.id
+            WHERE t.member_id = $1
+            AND t.status = 'issued'
+            ORDER BY t.issue_date DESC`,
+            [req.params.id]
+        );
+
+        res.json(result.rows);
+
+    } catch (err) {
+
+        console.error(err);
+        res.status(500).json({ error: err.message });
+
+    }
+
+});
 
 /* ================= START SERVER ================= */
 
