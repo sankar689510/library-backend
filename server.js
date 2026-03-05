@@ -394,6 +394,19 @@ app.post("/admin/approve-renewal/:id", verifyAdmin, async (req, res) => {
     }
 
 });
+app.get("/books", async (req, res) => {
+    try {
+
+        const result = await pool.query(
+            "SELECT id,title,author,barcode,status FROM books ORDER BY id DESC"
+        );
+
+        res.json(result.rows);
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 /* ================= START SERVER ================= */
 
