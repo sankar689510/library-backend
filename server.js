@@ -336,7 +336,7 @@ app.post("/member/request-renewal", async (req, res) => {
 app.get("/books", async (req, res) => {
     try {
         const result = await pool.query(
-            `SELECT id, title, author, status
+            `SELECT id, title, author, barcode, status
        FROM books
        ORDER BY title ASC`
         );
@@ -359,6 +359,26 @@ app.post("/member/save-push-token", async (req, res) => {
         res.json({ message: "Push token saved" });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+app.post("/renew-request", async (req, res) => {
+    const { member_id, transaction_id } = req.body;
+
+    if (!member_id || !transaction_id) {
+        return res.status(400).json({ error: "Missing data" });
+    }
+
+    try {
+        await pool.query(
+            "INSERT INTO renew_requests (member_id, transaction_id) VALUES ($1,$2)",
+            [member_id, transaction_id]
+        );
+
+        res.json({ message: "Renewal request submitted" });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Server error" });
     }
 });
 

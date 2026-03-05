@@ -24,8 +24,6 @@
             color: var(--text);
         }
 
-        /* LOGIN */
-
         #loginPage {
             height: 100vh;
             display: flex;
@@ -39,8 +37,6 @@
             border-radius: 12px;
             width: 320px;
         }
-
-        /* INPUTS */
 
         input {
             width: 100%;
@@ -72,8 +68,6 @@
             border-radius: 5px;
         }
 
-        /* SIDEBAR */
-
         .sidebar {
             width: 230px;
             height: 100vh;
@@ -82,10 +76,6 @@
             padding: 25px;
             display: none;
             overflow-y: auto;
-        }
-
-        .sidebar h2 {
-            margin-bottom: 25px;
         }
 
         .sidebar button {
@@ -105,15 +95,11 @@
             color: white;
         }
 
-        /* MAIN */
-
         .main {
             margin-left: 230px;
             padding: 40px;
             display: none;
         }
-
-        /* CARDS */
 
         .card {
             background: var(--panel);
@@ -122,13 +108,10 @@
             margin-bottom: 25px;
         }
 
-        /* STATS */
-
         .stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 20px;
-            margin-top: 20px;
         }
 
         .statBox {
@@ -138,8 +121,6 @@
             text-align: center;
         }
 
-        /* TABLES */
-
         .tableWrapper {
             overflow-x: auto;
         }
@@ -148,7 +129,7 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 15px;
-            min-width: 600px;
+            min-width: 700px;
         }
 
         th,
@@ -162,10 +143,7 @@
             color: var(--muted);
         }
 
-        /* MOBILE */
-
         @media (max-width: 768px) {
-
             .sidebar {
                 position: relative;
                 width: 100%;
@@ -173,12 +151,6 @@
                 display: flex;
                 flex-wrap: wrap;
                 padding: 15px;
-            }
-
-            .sidebar h2 {
-                width: 100%;
-                margin-bottom: 15px;
-                text-align: center;
             }
 
             .sidebar button {
@@ -202,7 +174,6 @@
 
 <body>
 
-    <!-- LOGIN -->
     <div id="loginPage">
         <div class="loginBox">
             <h2>Admin Login</h2>
@@ -212,7 +183,6 @@
         </div>
     </div>
 
-    <!-- ADMIN -->
     <div class="sidebar">
         <h2>📚 Smart Admin</h2>
         <button onclick="show('dashboard')">Dashboard</button>
@@ -326,15 +296,10 @@
             const res = await fetch(API + "/admin/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    username: username.value,
-                    password: password.value
-                })
+                body: JSON.stringify({ username: username.value, password: password.value })
             });
-
             const data = await res.json();
             if (!res.ok) { alert(data.error); return; }
-
             localStorage.setItem("adminToken", data.token);
             token = data.token;
             showAdmin();
@@ -344,7 +309,7 @@
             options.headers = options.headers || {};
             options.headers["Authorization"] = "Bearer " + token;
             const res = await fetch(url, options);
-            if (res.status === 403) { alert("Session expired"); logout(); return; }
+            if (res.status === 403) { alert("Session expired"); logout(); return null; }
             return res;
         }
 
@@ -358,51 +323,80 @@
         }
 
         async function loadDashboard() {
-            const members = await secureFetch(API + "/admin/members").then(r => r.json());
-            const books = await secureFetch(API + "/admin/books").then(r => r.json());
+            const res1 = await secureFetch(API + "/admin/members");
+            if (!res1) return;
+            const members = await res1.json();
+            const res2 = await secureFetch(API + "/admin/books");
+            if (!res2) return;
+            const books = await res2.json();
             totalMembers.innerText = members.length;
             totalBooks.innerText = books.length;
             issuedBooks.innerText = books.filter(b => b.status === "issued").length;
         }
 
+        async function loadMembers() {
+            const res = await secureFetch(API + "/admin/members");
+            if (!res) return;
+            const data = await res.json();
+            membersTable.innerHTML =
+                "<tr><th>Name</th><th>Phone</th><th>Expiry</th><th></th></tr>" +
+                data.map(m => `
+<tr>
+<td>${m.name}</td>
+<td>${m.phone}</td>
+<td>${m.membership_expiry?.split("T")[0]}</td>
+<td><button class="danger" onclick="deleteMember(${m.id})">Delete</button></td>
+</tr>`).join("");
+        }
+
+        async function loadBooks() {
+            const res = await secureFetch(API + "/admin/books");
+            if (!res) return;
+            const data = await res.json();
+            booksTable.innerHTML =
+                "<tr><th>Title</th><th>Author</th><th>Barcode</th><th>Status</th><th></th></tr>" +
+                data.map(b => `
+<tr>
+<td>${b.title}</td>
+<td>${b.author}</td>
+<td>${b.barcode || "-"}</td>
+<td>${b.status}</td>
+<td><button class="danger" onclick="deleteBook(${b.id})">Delete</button></td>
+</tr>`).join("");
+        }
+
+        async function loadTransactions() {
+            const res = await secureFetch(API + "/admin/transactions");
+            if (!res) return;
+            const data = await res.json();
+            transactionsTable.innerHTML =
+                "<tr><th>Member</th><th>Book</th><th>Status</th><th>Fine</th></tr>" +
+                data.map(t => `
+<tr>
+<td>${t.member_name}</td>
+<td>${t.book_title}</td>
+<td>${t.status}</td>
+<td>${t.fine || 0}</td>
+</tr>`).join("");
+        }
+
         async function addMember() {
-            const res = await secureFetch(API + "/admin/add-member", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    name: m_name.value,
-                    phone: m_phone.value,
-                    membership_start: m_start.value,
-                    membership_expiry: m_expiry.value
-                })
-            });
+            const res = await secureFetch(API + "/admin/add-member", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: m_name.value, phone: m_phone.value, membership_start: m_start.value, membership_expiry: m_expiry.value }) });
+            if (!res) return;
             const data = await res.json();
             alert(res.ok ? "Member Added" : data.error);
         }
 
         async function addBook() {
-            const res = await secureFetch(API + "/admin/add-book", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    title: b_title.value,
-                    author: b_author.value,
-                    barcode: b_barcode.value
-                })
-            });
+            const res = await secureFetch(API + "/admin/add-book", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: b_title.value, author: b_author.value, barcode: b_barcode.value }) });
+            if (!res) return;
             const data = await res.json();
             alert(res.ok ? "Book Added" : data.error);
         }
 
         async function manualIssue() {
-            const res = await secureFetch(API + "/admin/issue", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    member_id: issue_member_id.value,
-                    book_id: issue_book_id.value
-                })
-            });
+            const res = await secureFetch(API + "/admin/issue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ member_id: issue_member_id.value, book_id: issue_book_id.value }) });
+            if (!res) return;
             const data = await res.json();
             alert(res.ok ? data.message : data.error);
         }
@@ -417,45 +411,6 @@
             if (!confirm("Delete book?")) return;
             await secureFetch(API + "/admin/delete-book/" + id, { method: "DELETE" });
             loadBooks();
-        }
-
-        async function loadMembers() {
-            const data = await secureFetch(API + "/admin/members").then(r => r.json());
-            membersTable.innerHTML =
-                "<tr><th>Name</th><th>Phone</th><th>Expiry</th><th></th></tr>" +
-                data.map(m => `
-<tr>
-<td>${m.name}</td>
-<td>${m.phone}</td>
-<td>${m.membership_expiry?.split("T")[0]}</td>
-<td><button class="danger" onclick="deleteMember(${m.id})">Delete</button></td>
-</tr>`).join("");
-        }
-
-        async function loadBooks() {
-            const data = await secureFetch(API + "/admin/books").then(r => r.json());
-            booksTable.innerHTML =
-                "<tr><th>Title</th><th>Author</th><th>Status</th><th></th></tr>" +
-                data.map(b => `
-<tr>
-<td>${b.title}</td>
-<td>${b.author}</td>
-<td>${b.status}</td>
-<td><button class="danger" onclick="deleteBook(${b.id})">Delete</button></td>
-</tr>`).join("");
-        }
-
-        async function loadTransactions() {
-            const data = await secureFetch(API + "/admin/transactions").then(r => r.json());
-            transactionsTable.innerHTML =
-                "<tr><th>Member</th><th>Book</th><th>Status</th><th>Fine</th></tr>" +
-                data.map(t => `
-<tr>
-<td>${t.member_name}</td>
-<td>${t.book_title}</td>
-<td>${t.status}</td>
-<td>${t.fine || 0}</td>
-</tr>`).join("");
         }
 
         if (token) showAdmin();
