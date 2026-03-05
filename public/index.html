@@ -143,7 +143,8 @@
             color: var(--muted);
         }
 
-        @media (max-width: 768px) {
+        @media(max-width:768px) {
+
             .sidebar {
                 position: relative;
                 width: 100%;
@@ -168,6 +169,7 @@
             .stats {
                 grid-template-columns: 1fr;
             }
+
         }
     </style>
 </head>
@@ -192,6 +194,10 @@
         <button onclick="show('members')">Members</button>
         <button onclick="show('books')">Books</button>
         <button onclick="show('transactions')">Transactions</button>
+
+        <!-- NEW -->
+        <button onclick="show('renewals')">Renew Requests</button>
+
         <button class="danger" onclick="logout()">Logout</button>
     </div>
 
@@ -274,9 +280,20 @@
             </div>
         </div>
 
+        <!-- NEW RENEW SECTION -->
+        <div id="renewals" class="section" style="display:none;">
+            <div class="card">
+                <h3>Renewal Requests</h3>
+                <div class="tableWrapper">
+                    <table id="renewTable"></table>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
+
         const API = "https://library-backend-dm8n.onrender.com";
         let token = localStorage.getItem("adminToken");
 
@@ -293,51 +310,80 @@
         }
 
         async function adminLogin() {
+
             const res = await fetch(API + "/admin/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: username.value, password: password.value })
             });
+
             const data = await res.json();
+
             if (!res.ok) { alert(data.error); return; }
+
             localStorage.setItem("adminToken", data.token);
             token = data.token;
+
             showAdmin();
+
         }
 
         async function secureFetch(url, options = {}) {
+
             options.headers = options.headers || {};
             options.headers["Authorization"] = "Bearer " + token;
+
             const res = await fetch(url, options);
-            if (res.status === 403) { alert("Session expired"); logout(); return null; }
+
+            if (res.status === 403) {
+                alert("Session expired");
+                logout();
+                return null;
+            }
+
             return res;
+
         }
 
         function show(id) {
+
             document.querySelectorAll(".section").forEach(s => s.style.display = "none");
+
             document.getElementById(id).style.display = "block";
+
             if (id === "members") loadMembers();
             if (id === "books") loadBooks();
             if (id === "transactions") loadTransactions();
+            if (id === "renewals") loadRenewals();
             if (id === "dashboard") loadDashboard();
+
         }
 
         async function loadDashboard() {
+
             const res1 = await secureFetch(API + "/admin/members");
             if (!res1) return;
+
             const members = await res1.json();
+
             const res2 = await secureFetch(API + "/admin/books");
             if (!res2) return;
+
             const books = await res2.json();
+
             totalMembers.innerText = members.length;
             totalBooks.innerText = books.length;
             issuedBooks.innerText = books.filter(b => b.status === "issued").length;
+
         }
 
         async function loadMembers() {
+
             const res = await secureFetch(API + "/admin/members");
             if (!res) return;
+
             const data = await res.json();
+
             membersTable.innerHTML =
                 "<tr><th>Name</th><th>Phone</th><th>Expiry</th><th></th></tr>" +
                 data.map(m => `
@@ -347,12 +393,16 @@
 <td>${m.membership_expiry?.split("T")[0]}</td>
 <td><button class="danger" onclick="deleteMember(${m.id})">Delete</button></td>
 </tr>`).join("");
+
         }
 
         async function loadBooks() {
+
             const res = await secureFetch(API + "/admin/books");
             if (!res) return;
+
             const data = await res.json();
+
             booksTable.innerHTML =
                 "<tr><th>Title</th><th>Author</th><th>Barcode</th><th>Status</th><th></th></tr>" +
                 data.map(b => `
@@ -363,12 +413,16 @@
 <td>${b.status}</td>
 <td><button class="danger" onclick="deleteBook(${b.id})">Delete</button></td>
 </tr>`).join("");
+
         }
 
         async function loadTransactions() {
+
             const res = await secureFetch(API + "/admin/transactions");
             if (!res) return;
+
             const data = await res.json();
+
             transactionsTable.innerHTML =
                 "<tr><th>Member</th><th>Book</th><th>Status</th><th>Fine</th></tr>" +
                 data.map(t => `
@@ -378,27 +432,110 @@
 <td>${t.status}</td>
 <td>${t.fine || 0}</td>
 </tr>`).join("");
+
+        }
+
+        /* NEW FUNCTION */
+
+        async function loadRenewals() {
+
+            const res = await secureFetch(API + "/admin/renew-requests");
+            if (!res) return;
+
+            const data = await res.json();
+
+            renewTable.innerHTML =
+                "<tr><th>Name</th><th>Transaction ID</th><th>Status</th><th></th></tr>" +
+                data.map(r => `
+<tr>
+<td>${r.name}</td>
+<td>${r.transaction_id}</td>
+<td>${r.status}</td>
+<td>
+${r.status === "pending"
+                        ? `<button class="primary" onclick="approveRenew(${r.id})">Approve</button>`
+                        : "Approved"}
+</td>
+</tr>`).join("");
+
+        }
+
+        async function approveRenew(id) {
+
+            if (!confirm("Approve renewal?")) return;
+
+            const res = await secureFetch(API + "/admin/approve-renewal/" + id, {
+                method: "POST"
+            });
+
+            if (!res) return;
+
+            const data = await res.json();
+
+            alert(data.message);
+
+            loadRenewals();
+
         }
 
         async function addMember() {
-            const res = await secureFetch(API + "/admin/add-member", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: m_name.value, phone: m_phone.value, membership_start: m_start.value, membership_expiry: m_expiry.value }) });
+
+            const res = await secureFetch(API + "/admin/add-member", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: m_name.value,
+                    phone: m_phone.value,
+                    membership_start: m_start.value,
+                    membership_expiry: m_expiry.value
+                })
+            });
+
             if (!res) return;
+
             const data = await res.json();
+
             alert(res.ok ? "Member Added" : data.error);
+
         }
 
         async function addBook() {
-            const res = await secureFetch(API + "/admin/add-book", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: b_title.value, author: b_author.value, barcode: b_barcode.value }) });
+
+            const res = await secureFetch(API + "/admin/add-book", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    title: b_title.value,
+                    author: b_author.value,
+                    barcode: b_barcode.value
+                })
+            });
+
             if (!res) return;
+
             const data = await res.json();
+
             alert(res.ok ? "Book Added" : data.error);
+
         }
 
         async function manualIssue() {
-            const res = await secureFetch(API + "/admin/issue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ member_id: issue_member_id.value, book_id: issue_book_id.value }) });
+
+            const res = await secureFetch(API + "/admin/issue", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    member_id: issue_member_id.value,
+                    book_id: issue_book_id.value
+                })
+            });
+
             if (!res) return;
+
             const data = await res.json();
+
             alert(res.ok ? data.message : data.error);
+
         }
 
         async function deleteMember(id) {
@@ -414,6 +551,7 @@
         }
 
         if (token) showAdmin();
+
     </script>
 
 </body>

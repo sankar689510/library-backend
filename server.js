@@ -381,6 +381,64 @@ app.post("/renew-request", async (req, res) => {
         res.status(500).json({ error: "Server error" });
     }
 });
+app.get("/admin/renew-requests", async (req, res) => {
+    try {
+
+        const result = await pool.query(`
+      SELECT 
+        renew_requests.id,
+        renew_requests.transaction_id,
+        renew_requests.status,
+        members.name,
+        members.id as member_id
+      FROM renew_requests
+      JOIN members ON members.id = renew_requests.member_id
+      ORDER BY renew_requests.created_at DESC
+    `);
+
+        res.json(result.rows);
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+app.post("/admin/approve-renewal/:id", async (req, res) => {
+
+    const requestId = req.params.id;
+
+    try {
+
+        const request = await pool.query(
+            "SELECT member_id FROM renew_requests WHERE id=$1",
+            [requestId]
+        );
+
+        if (request.rows.length === 0)
+            return res.status(404).json({ error: "Request not found" });
+
+        const memberId = request.rows[0].member_id;
+
+        await pool.query(`
+      UPDATE members
+      SET membership_expiry = CURRENT_DATE + INTERVAL '1 year'
+      WHERE id=$1
+    `, [memberId]);
+
+        await pool.query(`
+      UPDATE renew_requests
+      SET status='approved'
+      WHERE id=$1
+    `, [requestId]);
+
+        res.json({ message: "Membership renewed successfully" });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Server error" });
+    }
+
+});
 
 /* ================= START SERVER ================= */
 
