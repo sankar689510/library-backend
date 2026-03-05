@@ -44,9 +44,10 @@ app.post("/admin/login", (req, res) => {
     res.json({ token });
 });
 
-/* ================= ADMIN AUTH MIDDLEWARE ================= */
+/* ================= ADMIN AUTH ================= */
 
 function verifyAdmin(req, res, next) {
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader)
@@ -60,14 +61,17 @@ function verifyAdmin(req, res, next) {
     } catch {
         return res.status(403).json({ error: "Invalid or expired token" });
     }
+
 }
 
 /* ================= MEMBER LOGIN ================= */
 
 app.post("/member-login", async (req, res) => {
+
     const { phone } = req.body;
 
     try {
+
         const result = await pool.query(
             "SELECT * FROM members WHERE phone=$1",
             [phone]
@@ -77,17 +81,21 @@ app.post("/member-login", async (req, res) => {
             return res.status(404).json({ error: "Member not found" });
 
         res.json(result.rows[0]);
+
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+
 });
 
 /* ================= ADD MEMBER ================= */
 
 app.post("/admin/add-member", verifyAdmin, async (req, res) => {
+
     const { name, phone, membership_start, membership_expiry } = req.body;
 
     try {
+
         const result = await pool.query(
             `INSERT INTO members
        (name, phone, membership_start, membership_expiry)
@@ -97,17 +105,21 @@ app.post("/admin/add-member", verifyAdmin, async (req, res) => {
         );
 
         res.json(result.rows[0]);
+
     } catch (err) {
         res.status(400).json({ error: "Phone already exists or invalid data" });
     }
+
 });
 
 /* ================= ADD BOOK ================= */
 
 app.post("/admin/add-book", verifyAdmin, async (req, res) => {
+
     const { title, author, barcode } = req.body;
 
     try {
+
         const result = await pool.query(
             `INSERT INTO books
        (title, author, barcode)
@@ -117,17 +129,21 @@ app.post("/admin/add-book", verifyAdmin, async (req, res) => {
         );
 
         res.json(result.rows[0]);
+
     } catch (err) {
         res.status(400).json({ error: "Barcode already exists" });
     }
+
 });
 
 /* ================= SCAN BOOK ================= */
 
 app.post("/scan", async (req, res) => {
+
     const { member_id, barcode } = req.body;
 
     try {
+
         const today = new Date();
 
         const memberRes = await pool.query(
@@ -154,6 +170,7 @@ app.post("/scan", async (req, res) => {
         const book = bookRes.rows[0];
 
         if (book.status === "available") {
+
             const dueDate = new Date();
             dueDate.setDate(today.getDate() + 14);
 
@@ -170,9 +187,11 @@ app.post("/scan", async (req, res) => {
             );
 
             return res.json({ message: "Book issued successfully" });
+
         }
 
         if (book.status === "issued") {
+
             const transRes = await pool.query(
                 `SELECT * FROM transactions
          WHERE book_id=$1 AND status='issued'`,
@@ -192,10 +211,13 @@ app.post("/scan", async (req, res) => {
             let fine = 0;
 
             if (today > transaction.due_date) {
+
                 const daysLate = Math.ceil(
                     (today - transaction.due_date) / (1000 * 60 * 60 * 24)
                 );
+
                 fine = daysLate * 5;
+
             }
 
             await pool.query(
@@ -214,30 +236,39 @@ app.post("/scan", async (req, res) => {
                 message: "Book returned successfully",
                 fine,
             });
+
         }
 
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+
 });
 
 /* ================= ADMIN VIEW ================= */
 
 app.get("/admin/members", verifyAdmin, async (req, res) => {
+
     const result = await pool.query(
         "SELECT * FROM members ORDER BY id DESC"
     );
+
     res.json(result.rows);
+
 });
 
 app.get("/admin/books", verifyAdmin, async (req, res) => {
+
     const result = await pool.query(
         "SELECT * FROM books ORDER BY id DESC"
     );
+
     res.json(result.rows);
+
 });
 
 app.get("/admin/transactions", verifyAdmin, async (req, res) => {
+
     const result = await pool.query(`
     SELECT t.*, 
            m.name AS member_name, 
@@ -249,126 +280,36 @@ app.get("/admin/transactions", verifyAdmin, async (req, res) => {
   `);
 
     res.json(result.rows);
+
 });
 
-app.delete("/admin/delete-book/:id", verifyAdmin, async (req, res) => {
-    try {
-        await pool.query("DELETE FROM books WHERE id=$1", [req.params.id]);
-        res.json({ message: "Book deleted" });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+/* ================= RENEW REQUEST ================= */
 
-app.delete("/admin/delete-member/:id", verifyAdmin, async (req, res) => {
-    try {
-        await pool.query("DELETE FROM members WHERE id=$1", [req.params.id]);
-        res.json({ message: "Member removed" });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+app.post("/renew-request", async (req, res) => {
 
-app.post("/admin/issue", verifyAdmin, async (req, res) => {
-    const { member_id, book_id } = req.body;
-    const today = new Date();
-    const dueDate = new Date();
-    dueDate.setDate(today.getDate() + 14);
+    const { member_id, transaction_id } = req.body;
+
+    if (!member_id || !transaction_id)
+        return res.status(400).json({ error: "Missing data" });
 
     try {
-        await pool.query(
-            "UPDATE books SET status='issued' WHERE id=$1",
-            [book_id]
-        );
 
-        await pool.query(
-            `INSERT INTO transactions
-       (member_id, book_id, issue_date, due_date, status)
-       VALUES ($1,$2,$3,$4,'issued')`,
-            [member_id, book_id, today, dueDate]
-        );
-
-        res.json({ message: "Book issued manually" });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-/* ================= PUBLIC ROUTES ================= */
-
-app.get("/member/:id/books", async (req, res) => {
-    try {
-        const result = await pool.query(
-            `SELECT t.id,
-              b.title,
-              b.author,
-              t.issue_date,
-              t.due_date
-       FROM transactions t
-       JOIN books b ON t.book_id = b.id
-       WHERE t.member_id = $1
-       AND t.status = 'issued'
-       ORDER BY t.issue_date DESC`,
-            [req.params.id]
-        );
-
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.post("/member/request-renewal", async (req, res) => {
-    const { member_id } = req.body;
-
-    try {
-        await pool.query(
-            "UPDATE members SET renewal_requested = true WHERE id = $1",
+        const pending = await pool.query(
+            "SELECT * FROM renew_requests WHERE member_id=$1 AND status='pending'",
             [member_id]
         );
 
-        res.json({ message: "Renewal request sent" });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+        if (pending.rows.length > 0)
+            return res.status(400).json({ error: "Renewal already requested" });
 
-app.get("/books", async (req, res) => {
-    try {
-        const result = await pool.query(
-            `SELECT id, title, author, barcode, status
-       FROM books
-       ORDER BY title ASC`
+        const existing = await pool.query(
+            "SELECT * FROM renew_requests WHERE transaction_id=$1",
+            [transaction_id]
         );
 
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+        if (existing.rows.length > 0)
+            return res.status(400).json({ error: "Transaction already used" });
 
-app.post("/member/save-push-token", async (req, res) => {
-    const { member_id, push_token } = req.body;
-
-    try {
-        await pool.query(
-            "UPDATE members SET push_token = $1 WHERE id = $2",
-            [push_token, member_id]
-        );
-
-        res.json({ message: "Push token saved" });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-app.post("/renew-request", async (req, res) => {
-    const { member_id, transaction_id } = req.body;
-
-    if (!member_id || !transaction_id) {
-        return res.status(400).json({ error: "Missing data" });
-    }
-
-    try {
         await pool.query(
             "INSERT INTO renew_requests (member_id, transaction_id) VALUES ($1,$2)",
             [member_id, transaction_id]
@@ -377,11 +318,18 @@ app.post("/renew-request", async (req, res) => {
         res.json({ message: "Renewal request submitted" });
 
     } catch (err) {
+
         console.error(err);
         res.status(500).json({ error: "Server error" });
+
     }
+
 });
-app.get("/admin/renew-requests", async (req, res) => {
+
+/* ================= ADMIN RENEW CONTROL ================= */
+
+app.get("/admin/renew-requests", verifyAdmin, async (req, res) => {
+
     try {
 
         const result = await pool.query(`
@@ -400,11 +348,15 @@ app.get("/admin/renew-requests", async (req, res) => {
         res.json(result.rows);
 
     } catch (err) {
+
         console.error(err);
         res.status(500).json({ error: "Server error" });
+
     }
+
 });
-app.post("/admin/approve-renewal/:id", async (req, res) => {
+
+app.post("/admin/approve-renewal/:id", verifyAdmin, async (req, res) => {
 
     const requestId = req.params.id;
 
@@ -435,8 +387,10 @@ app.post("/admin/approve-renewal/:id", async (req, res) => {
         res.json({ message: "Membership renewed successfully" });
 
     } catch (err) {
+
         console.error(err);
         res.status(500).json({ error: "Server error" });
+
     }
 
 });
