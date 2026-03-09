@@ -469,31 +469,32 @@ app.post("/send-otp", async (req, res) => {
 });
 
 
-app.post("/send-otp", async (req, res) => {
+app.post("/verify-otp", async (req, res) => {
 
-    const { phone } = req.body;
+    const { phone, otp } = req.body;
 
-    if (!phone)
-        return res.status(400).json({ error: "Phone required" });
-
-    const otp = otpGenerator.generate(6, {
-        digits: true,
-        upperCaseAlphabets: false,
-        lowerCaseAlphabets: false,
-        specialChars: false
-    });
-
-    const expiry = new Date();
-    expiry.setMinutes(expiry.getMinutes() + 5);
-
-    await pool.query(
-        "INSERT INTO otp_codes (phone, otp, expires_at) VALUES ($1,$2,$3)",
-        [phone, otp, expiry]
+    const result = await pool.query(
+        "SELECT * FROM otp_codes WHERE phone=$1 AND otp=$2 ORDER BY id DESC LIMIT 1",
+        [phone, otp]
     );
 
-    console.log("OTP:", otp);
+    if (result.rows.length === 0)
+        return res.status(400).json({ error: "Invalid OTP" });
 
-    res.json({ message: "OTP sent" });
+    const record = result.rows[0];
+
+    if (new Date() > record.expires_at)
+        return res.status(400).json({ error: "OTP expired" });
+
+    const member = await pool.query(
+        "SELECT * FROM members WHERE phone=$1",
+        [phone]
+    );
+
+    if (member.rows.length === 0)
+        return res.status(404).json({ error: "Member not found" });
+
+    res.json(member.rows[0]);
 
 });
 
