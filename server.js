@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
 const jwt = require("jsonwebtoken");
+const axios = require("axios");
 
 const app = express();
 app.use(cors());
@@ -447,24 +448,38 @@ app.post("/send-otp", async (req, res) => {
     if (!phone)
         return res.status(400).json({ error: "Phone required" });
 
-    const otp = otpGenerator.generate(6, {
-        digits: true,
-        upperCaseAlphabets: false,
-        lowerCaseAlphabets: false,
-        specialChars: false
-    });
+    try {
 
-    const expiry = new Date();
-    expiry.setMinutes(expiry.getMinutes() + 5);
+        const otp = Math.floor(100000 + Math.random() * 900000);
 
-    await pool.query(
-        "INSERT INTO otp_codes (phone, otp, expires_at) VALUES ($1,$2,$3)",
-        [phone, otp, expiry]
-    );
+        const expiry = new Date();
+        expiry.setMinutes(expiry.getMinutes() + 5);
 
-    console.log("OTP:", otp);
+        await pool.query(
+            "INSERT INTO otp_codes(phone, otp, expires_at) VALUES ($1,$2,$3)",
+            [phone, otp, expiry]
+        );
 
-    res.json({ message: "OTP sent" });
+        await axios.get("https://www.fast2sms.com/dev/bulkV2", {
+
+            params: {
+                authorization: process.env.FAST2SMS_API_KEY,
+                route: "otp",
+                variables_values: otp,
+                flash: "0",
+                numbers: phone
+            }
+
+        });
+
+        res.json({ message: "OTP sent successfully" });
+
+    } catch (err) {
+
+        console.error(err);
+        res.status(500).json({ error: "Failed to send OTP" });
+
+    }
 
 });
 
