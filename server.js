@@ -473,12 +473,11 @@ app.post("/send-otp", async (req, res) => {
         });
 
         res.json({ message: "OTP sent successfully" });
+    }
 
-    } catch (err) {
-
-        console.error(err);
+    catch (err) {
+        console.error("FAST2SMS ERROR:", err.response?.data || err.message);
         res.status(500).json({ error: "Failed to send OTP" });
-
     }
 
 });
