@@ -438,6 +438,64 @@ app.get("/member/:id/books", async (req, res) => {
     }
 
 });
+const otpGenerator = require("otp-generator");
+
+app.post("/send-otp", async (req, res) => {
+
+    const { phone } = req.body;
+
+    if (!phone)
+        return res.status(400).json({ error: "Phone required" });
+
+    const otp = otpGenerator.generate(6, {
+        digits: true,
+        alphabets: false,
+        upperCase: false,
+        specialChars: false
+    });
+
+    const expiry = new Date();
+    expiry.setMinutes(expiry.getMinutes() + 5);
+
+    await pool.query(
+        "INSERT INTO otp_codes (phone, otp, expires_at) VALUES ($1,$2,$3)",
+        [phone, otp, expiry]
+    );
+
+    console.log("OTP:", otp);
+
+    res.json({ message: "OTP sent" });
+
+});
+const otpGenerator = require("otp-generator");
+
+app.post("/send-otp", async (req, res) => {
+
+    const { phone } = req.body;
+
+    if (!phone)
+        return res.status(400).json({ error: "Phone required" });
+
+    const otp = otpGenerator.generate(6, {
+        digits: true,
+        alphabets: false,
+        upperCase: false,
+        specialChars: false
+    });
+
+    const expiry = new Date();
+    expiry.setMinutes(expiry.getMinutes() + 5);
+
+    await pool.query(
+        "INSERT INTO otp_codes (phone, otp, expires_at) VALUES ($1,$2,$3)",
+        [phone, otp, expiry]
+    );
+
+    console.log("OTP:", otp);
+
+    res.json({ message: "OTP sent" });
+
+});
 
 /* ================= START SERVER ================= */
 
