@@ -467,7 +467,7 @@ app.post("/send-otp", async (req, res) => {
     res.json({ message: "OTP sent" });
 
 });
-const otpGenerator = require("otp-generator");
+
 
 app.post("/send-otp", async (req, res) => {
 
