@@ -449,8 +449,8 @@ app.post("/send-otp", async (req, res) => {
 
     const otp = otpGenerator.generate(6, {
         digits: true,
-        alphabets: false,
-        upperCase: false,
+        upperCaseAlphabets: false,
+        lowerCaseAlphabets: false,
         specialChars: false
     });
 
@@ -478,8 +478,8 @@ app.post("/send-otp", async (req, res) => {
 
     const otp = otpGenerator.generate(6, {
         digits: true,
-        alphabets: false,
-        upperCase: false,
+        upperCaseAlphabets: false,
+        lowerCaseAlphabets: false,
         specialChars: false
     });
 
