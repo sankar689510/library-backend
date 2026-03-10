@@ -4,6 +4,7 @@ const cors = require("cors");
 const { Pool } = require("pg");
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
+const bcrypt = require("bcrypt");
 
 const app = express();
 app.use(cors());
@@ -439,76 +440,45 @@ app.get("/member/:id/books", async (req, res) => {
     }
 
 });
-const otpGenerator = require("otp-generator");
+app.post("/signup", async (req, res) => {
 
-app.post("/send-otp", async (req, res) => {
-
-    const { phone } = req.body;
-
-    if (!phone)
-        return res.status(400).json({ error: "Phone required" });
+    const { name, email, password } = req.body;
 
     try {
 
-        const otp = Math.floor(100000 + Math.random() * 900000);
-
-        const expiry = new Date();
-        expiry.setMinutes(expiry.getMinutes() + 5);
-
-        await pool.query(
-            "INSERT INTO otp_codes(phone, otp, expires_at) VALUES ($1,$2,$3)",
-            [phone, otp, expiry]
+        // check if email already exists
+        const existing = await pool.query(
+            "SELECT * FROM members WHERE email=$1",
+            [email]
         );
 
-        await axios.get("https://www.fast2sms.com/dev/bulkV2", {
+        if (existing.rows.length > 0) {
+            return res.status(400).json({ error: "Email already registered" });
+        }
 
-            params: {
-                authorization: process.env.FAST2SMS_API_KEY,
-                route: "otp",
-                variables_values: otp,
-                flash: "0",
-                numbers: phone
-            }
+        // hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
 
+        // create member (membership expired initially)
+        const result = await pool.query(
+            `INSERT INTO members
+      (name, email, password, membership_start, membership_expiry)
+      VALUES ($1,$2,$3,CURRENT_DATE,CURRENT_DATE)
+      RETURNING *`,
+            [name, email, hashedPassword]
+        );
+
+        res.json({
+            message: "Signup successful",
+            member: result.rows[0]
         });
 
-        res.json({ message: "OTP sent successfully" });
+    } catch (err) {
+
+        console.error(err);
+        res.status(500).json({ error: "Server error" });
+
     }
-
-    catch (err) {
-        console.error("FAST2SMS ERROR:", err.response?.data || err.message);
-        res.status(500).json({ error: "Failed to send OTP" });
-    }
-
-});
-
-
-app.post("/verify-otp", async (req, res) => {
-
-    const { phone, otp } = req.body;
-
-    const result = await pool.query(
-        "SELECT * FROM otp_codes WHERE phone=$1 AND otp=$2 ORDER BY id DESC LIMIT 1",
-        [phone, otp]
-    );
-
-    if (result.rows.length === 0)
-        return res.status(400).json({ error: "Invalid OTP" });
-
-    const record = result.rows[0];
-
-    if (new Date() > record.expires_at)
-        return res.status(400).json({ error: "OTP expired" });
-
-    const member = await pool.query(
-        "SELECT * FROM members WHERE phone=$1",
-        [phone]
-    );
-
-    if (member.rows.length === 0)
-        return res.status(404).json({ error: "Member not found" });
-
-    res.json(member.rows[0]);
 
 });
 
