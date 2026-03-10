@@ -70,22 +70,32 @@ function verifyAdmin(req, res, next) {
 
 app.post("/member-login", async (req, res) => {
 
-    const { phone } = req.body;
+    const { email, password } = req.body;
 
     try {
 
         const result = await pool.query(
-            "SELECT * FROM members WHERE phone=$1",
-            [phone]
+            "SELECT * FROM members WHERE email=$1",
+            [email]
         );
 
         if (result.rows.length === 0)
-            return res.status(404).json({ error: "Member not found" });
+            return res.status(404).json({ error: "User not found" });
 
-        res.json(result.rows[0]);
+        const member = result.rows[0];
+
+        const valid = await bcrypt.compare(password, member.password);
+
+        if (!valid)
+            return res.status(401).json({ error: "Wrong password" });
+
+        res.json(member);
 
     } catch (err) {
-        res.status(500).json({ error: err.message });
+
+        console.error(err);
+        res.status(500).json({ error: "Server error" });
+
     }
 
 });
