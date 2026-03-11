@@ -3,7 +3,6 @@ const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
 const jwt = require("jsonwebtoken");
-const axios = require("axios");
 const bcrypt = require("bcrypt");
 
 const app = express();
@@ -89,6 +88,7 @@ app.post("/member-login", async (req, res) => {
         if (!valid)
             return res.status(401).json({ error: "Wrong password" });
 
+        delete member.password;
         res.json(member);
 
     } catch (err) {
@@ -102,27 +102,17 @@ app.post("/member-login", async (req, res) => {
 
 /* ================= ADD MEMBER ================= */
 
-app.post("/admin/add-member", verifyAdmin, async (req, res) => {
+const { name, email, password, membership_start, membership_expiry } = req.body;
 
-    const { name, phone, membership_start, membership_expiry } = req.body;
+const hashedPassword = await bcrypt.hash(password, 10);
 
-    try {
-
-        const result = await pool.query(
-            `INSERT INTO members
-       (name, phone, membership_start, membership_expiry)
-       VALUES ($1,$2,$3,$4)
-       RETURNING *`,
-            [name, phone, membership_start, membership_expiry]
-        );
-
-        res.json(result.rows[0]);
-
-    } catch (err) {
-        res.status(400).json({ error: "Phone already exists or invalid data" });
-    }
-
-});
+const result = await pool.query(
+    `INSERT INTO members
+(name, email, password, membership_start, membership_expiry)
+VALUES ($1,$2,$3,$4,$5)
+RETURNING *`,
+    [name, email, hashedPassword, membership_start, membership_expiry]
+);
 
 /* ================= ADD BOOK ================= */
 
@@ -492,6 +482,48 @@ app.post("/signup", async (req, res) => {
 
 });
 
+/* ================= GOOGLE LOGIN ================= */
+
+app.post("/google-login", async (req, res) => {
+
+    const { name, email } = req.body;
+
+    try {
+
+        const existing = await pool.query(
+            "SELECT * FROM members WHERE email=$1",
+            [email]
+        );
+
+        if (existing.rows.length > 0) {
+
+            const member = existing.rows[0];
+            delete member.password;
+            return res.json(member);
+
+        }
+
+        const result = await pool.query(
+            `INSERT INTO members
+            (name,email,membership_start,membership_expiry)
+            VALUES ($1,$2,CURRENT_DATE,CURRENT_DATE)
+            RETURNING *`,
+            [name, email]
+        );
+
+        const member = result.rows[0];
+        delete member.password;
+
+        res.json(member);
+
+    } catch (err) {
+
+        console.error(err);
+        res.status(500).json({ error: "Server error" });
+
+    }
+
+});
 /* ================= START SERVER ================= */
 
 const PORT = process.env.PORT || 5000;
