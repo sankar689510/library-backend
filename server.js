@@ -102,17 +102,32 @@ app.post("/member-login", async (req, res) => {
 
 /* ================= ADD MEMBER ================= */
 
-const { name, email, password, membership_start, membership_expiry } = req.body;
+app.post("/admin/add-member", verifyAdmin, async (req, res) => {
 
-const hashedPassword = await bcrypt.hash(password, 10);
+    const { name, email, password, membership_start, membership_expiry } = req.body;
 
-const result = await pool.query(
-    `INSERT INTO members
-(name, email, password, membership_start, membership_expiry)
-VALUES ($1,$2,$3,$4,$5)
-RETURNING *`,
-    [name, email, hashedPassword, membership_start, membership_expiry]
-);
+    try {
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const result = await pool.query(
+            `INSERT INTO members
+            (name, email, password, membership_start, membership_expiry)
+            VALUES ($1,$2,$3,$4,$5)
+            RETURNING *`,
+            [name, email, hashedPassword, membership_start, membership_expiry]
+        );
+
+        res.json(result.rows[0]);
+
+    } catch (err) {
+
+        console.error(err);
+        res.status(400).json({ error: "Email already exists or invalid data" });
+
+    }
+
+});
 
 /* ================= ADD BOOK ================= */
 
