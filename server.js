@@ -4,6 +4,15 @@ const cors = require("cors");
 const { Pool } = require("pg");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const nodemailer = require("nodemailer");
+const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+        user: "sankar689510@gmail.com",
+        pass: "oibd uwyk zqjb zdne"
+    }
+});
+const otpStore = {};
 
 const app = express();
 app.use(cors());
@@ -527,6 +536,85 @@ app.post("/google-login", async (req, res) => {
         );
 
         const member = result.rows[0];
+        delete member.password;
+
+        res.json(member);
+
+    } catch (err) {
+
+        console.error(err);
+        res.status(500).json({ error: "Server error" });
+
+    }
+
+});
+app.post("/send-otp", async (req, res) => {
+
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({ error: "Email required" });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000);
+
+    otpStore[email] = otp;
+
+    try {
+
+        await transporter.sendMail({
+            from: "sankar689510@gmail.com",
+            to: email,
+            subject: "Library Login OTP",
+            text: `Your OTP is ${otp}`
+        });
+
+        res.json({ message: "OTP sent" });
+
+    } catch (err) {
+
+        res.status(500).json({ error: "Failed to send OTP" });
+
+    }
+
+});
+app.post("/verify-otp", async (req, res) => {
+
+    const { email, otp } = req.body;
+
+    if (otpStore[email] != otp) {
+        return res.status(400).json({ error: "Invalid OTP" });
+    }
+
+    delete otpStore[email];
+
+    try {
+
+        const result = await pool.query(
+            "SELECT * FROM members WHERE email=$1",
+            [email]
+        );
+
+        let member;
+
+        if (result.rows.length === 0) {
+
+            const newUser = await pool.query(
+                `INSERT INTO members
+        (name,email,membership_start,membership_expiry)
+        VALUES ($1,$2,CURRENT_DATE,CURRENT_DATE)
+        RETURNING *`,
+                [email, email]
+            );
+
+            member = newUser.rows[0];
+
+        } else {
+
+            member = result.rows[0];
+
+        }
+
         delete member.password;
 
         res.json(member);
